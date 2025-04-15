@@ -4,26 +4,38 @@ Sully - An advanced cognitive system with integrated memory and enhanced capabil
 # --- Imports ---
 import os
 import json
-from typing import Dict, List, Any, Optional, Union, Tuple
+import sys
+import logging
+import inspect
+import traceback
+from typing import Dict, List, Any, Optional, Union, Tuple, Set, Callable
 from pathlib import Path
 from datetime import datetime
+import importlib
+import uuid
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("sully.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("sully")
+
+# Core modules imports
 from sully_engine.kernel_integration import initialize_kernel_integration, KernelIntegrationSystem
+from sully_engine.memory_integration import MemoryIntegration, integrate_with_sully
+from sully_engine.logic_kernel import LogicKernel, integrate_with_sully as integrate_logic
+from sully_engine.pdf_reader import PDFReader
 
-
-# Core modules
+# Import cognitive modules
 from sully_engine.kernel_modules.identity import SullyIdentity
 from sully_engine.kernel_modules.codex import SullyCodex
 from sully_engine.reasoning import SymbolicReasoningNode
 from sully_engine.memory import SullySearchMemory
-
-# Memory Integration
-from sully_engine.memory_integration import MemoryIntegration
-from sully_engine.memory_integration import integrate_with_sully
-
-# Logic Kernel
-from sully_engine.logic_kernel import LogicKernel, integrate_with_sully as integrate_logic
-
-# Kernel Modules
 from sully_engine.kernel_modules.judgment import JudgmentProtocol
 from sully_engine.kernel_modules.dream import DreamCore
 from sully_engine.kernel_modules.math_translator import SymbolicMathTranslator
@@ -36,14 +48,26 @@ from sully_engine.kernel_modules.visual_cognition import VisualCognitionSystem
 from sully_engine.kernel_modules.emergence_framework import EmergenceFramework
 from sully_engine.kernel_modules.virtue import VirtueEngine
 from sully_engine.kernel_modules.intuition import Intuition
+from sully_engine.kernel_modules.persona import PersonaManager
 
-# Import PDF reader
-from sully_engine.pdf_reader import PDFReader
+# Import conversation engine
+try:
+    from sully_engine.conversation_engine import ConversationEngine
+except ImportError:
+    logger.warning("ConversationEngine import failed. Chat functionality may be limited.")
+    ConversationEngine = None
 
 # Configuration constants
 MEMORY_PATH = "sully_memory_store.json"
 MEMORY_INTEGRATION_ENABLED = True
+DEFAULT_LOG_LEVEL = logging.INFO
 
+# Cognitive modes
+COGNITIVE_MODES = [
+    "emergent", "analytical", "creative", "critical", "ethereal",
+    "humorous", "professional", "casual", "musical", "visual",
+    "scientific", "philosophical", "poetic", "instructional"
+]
 
 class Sully:
     """
@@ -51,107 +75,325 @@ class Sully:
     with enhanced integrated memory and expressing it through multiple cognitive modes.
     """
 
-    def __init__(self, memory_path: Optional[str] = None):
-        """Initialize Sully's cognitive systems with integrated memory."""
-        # Core cognitive architecture
+    def __init__(self, memory_path: Optional[str] = None, log_level: int = DEFAULT_LOG_LEVEL, 
+                 enable_memory_integration: bool = MEMORY_INTEGRATION_ENABLED):
+        """
+        Initialize Sully's cognitive systems with integrated memory.
+        
+        Args:
+            memory_path: Optional path to memory storage
+            log_level: Logging level (default: INFO)
+            enable_memory_integration: Whether to enable memory integration
+        """
+        # Configure logging
+        self.logger = logging.getLogger("sully")
+        self.logger.setLevel(log_level)
+        self.logger.info("Initializing Sully cognitive system...")
+        
+        # Track initialization errors for graceful degradation
+        self.initialization_errors = {}
+        
+        # Core cognitive architecture initialization
         # Initialize reasoning node first since identity system depends on it
-        self.memory = SullySearchMemory()
-        self.codex = SullyCodex()
-        self.reasoning_node = SymbolicReasoningNode(
-            codex=self.codex,
-            translator=None,  # Will set after initializing translator
-            memory=self.memory
-        )
+        self._initialize_core_components()
         
-        # Initialize identity system with connections to other modules
-        self.identity = SullyIdentity(
-            memory_system=self.memory,
-            reasoning_engine=self.reasoning_node
-        )
-        
-        # Specialized cognitive modules
-        self.translator = SymbolicMathTranslator()
-        self.judgment = JudgmentProtocol()
-        self.dream = DreamCore()
-        self.paradox = ParadoxLibrary()
-        self.fusion = SymbolFusionEngine()
-        
-        # Now complete the reasoning node initialization
-        self.reasoning_node.translator = self.translator
-        
-        # Advanced cognitive modules
-        self.neural_modification = NeuralModification(
-            reasoning_engine=self.reasoning_node,
-            memory_system=self.memory
-        )
-        self.continuous_learning = ContinuousLearningSystem(
-            memory_system=self.memory,
-            codex=self.codex
-        )
-        self.autonomous_goals = AutonomousGoalSystem(
-            memory_system=self.memory,
-            learning_system=self.continuous_learning
-        )
-        self.visual_cognition = VisualCognitionSystem(
-            codex=self.codex
-        )
-        self.logic_kernel = None
-        
-        # Initialize with proper connections between modules
-        self.judgment = JudgmentProtocol(memory=self.memory, reasoning=self.reasoning_node)
-        self.intuition = Intuition(memory=self.memory, reasoning=self.reasoning_node, codex=self.codex)
-        self.virtue = VirtueEngine(judgment=self.judgment, memory=self.memory, logic_kernel=self.logic_kernel, reasoning=self.reasoning_node)
-        
-        # Complete the initialization of modules that need the reasoning node
-        self.continuous_learning.reasoning = self.reasoning_node
-        self.autonomous_goals.reasoning = self.reasoning_node
-        self.visual_cognition.reasoning = self.reasoning_node
+        # Advanced cognitive modules initialization
+        self._initialize_advanced_modules()
         
         # Initialize emergence framework with all cognitive modules
-        self.emergence = EmergenceFramework(
-            all_cognitive_modules={
-                "reasoning_node": self.reasoning_node,
-                "judgment": self.judgment,
-                "intuition": self.intuition,
-                "dream": self.dream,
-                "fusion": self.fusion,
-                "translator": self.translator,
-                "paradox": self.paradox,
-                "codex": self.codex,
-                "memory": self.memory,
-                "identity": self.identity,
-                "neural_modifier": self.neural_modification,
-                "learning_system": self.continuous_learning,
-                "goal_system": self.autonomous_goals,
-                "visual_system": self.visual_cognition,
-                "virtue": self.virtue
-            }
-        )
+        self._initialize_emergence_framework()
         
         # PDF reader for direct document processing
-        self.pdf_reader = PDFReader(ocr_enabled=True, dpi=300)
+        self.pdf_reader = self._initialize_with_fallback(
+            "pdf_reader", 
+            lambda: PDFReader(ocr_enabled=True, dpi=300),
+            "PDF reader initialization failed. Document processing will be limited."
+        )
         
         # Experiential knowledge - unlimited and ever-growing
         self.knowledge = []
         
         # Initialize the conversation engine and connect to the core systems
-        from sully_engine.conversation_engine import ConversationEngine
-        self.conversation = ConversationEngine(
-            reasoning_node=self.reasoning_node,
-            memory_system=self.memory,
-            codex=self.codex
-        )
+        self._initialize_conversation_engine()
         
         # Initialize memory integration system if enabled
         self.memory_integration = None
-        if MEMORY_INTEGRATION_ENABLED:
-            memory_file = memory_path or MEMORY_PATH
-            self.memory_integration = integrate_with_sully(self, memory_file)
+        if enable_memory_integration:
+            self._initialize_memory_integration(memory_path or MEMORY_PATH)
             
-       # Initialize kernel integration system
-        self.kernel_integration = None
+        # Initialize kernel integration system
+        self._initialize_kernel_integration()
+        
+        # Initialize logic kernel
+        self._initialize_logic_kernel()
+        
+        # System metadata
+        self.system_id = str(uuid.uuid4())
+        self.creation_time = datetime.now()
+        self.last_active = self.creation_time
+        
+        # Track module access statistics
+        self.module_access_stats = {}
+        
+        # Event hooks for extensibility
+        self.hooks = {
+            "before_reasoning": [],
+            "after_reasoning": [],
+            "before_memory_store": [],
+            "after_memory_store": [],
+            "before_document_processing": [],
+            "after_document_processing": []
+        }
+        
+        self.logger.info(f"Sully initialization complete. System ID: {self.system_id}")
+        
+    def _initialize_with_fallback(self, component_name: str, init_func: Callable, 
+                                 error_message: str, fallback_func: Optional[Callable] = None) -> Any:
+        """
+        Initialize a component with error handling and optional fallback.
+        
+        Args:
+            component_name: Name of the component
+            init_func: Initialization function
+            error_message: Message to log on error
+            fallback_func: Optional fallback initialization function
+            
+        Returns:
+            Initialized component or None
+        """
         try:
-            self.kernel_integration = initialize_kernel_integration(
+            component = init_func()
+            return component
+        except Exception as e:
+            self.logger.error(f"{error_message} Error: {str(e)}")
+            self.initialization_errors[component_name] = {
+                "error": str(e),
+                "traceback": traceback.format_exc()
+            }
+            
+            if fallback_func:
+                try:
+                    self.logger.info(f"Attempting fallback initialization for {component_name}")
+                    return fallback_func()
+                except Exception as fallback_e:
+                    self.logger.error(f"Fallback initialization for {component_name} failed: {str(fallback_e)}")
+                    
+            return None
+
+    def _initialize_core_components(self):
+        """Initialize core cognitive components."""
+        # Core components with fallbacks
+        self.memory = self._initialize_with_fallback(
+            "memory",
+            lambda: SullySearchMemory(),
+            "Memory system initialization failed. Using basic memory.",
+            lambda: {"queries": [], "results": []}
+        )
+        
+        self.codex = self._initialize_with_fallback(
+            "codex",
+            lambda: SullyCodex(),
+            "Codex initialization failed. Knowledge retrieval will be limited."
+        )
+        
+        # Create reasoning node with placeholder for translator
+        self.reasoning_node = self._initialize_with_fallback(
+            "reasoning_node",
+            lambda: SymbolicReasoningNode(
+                codex=self.codex,
+                translator=None,  # Will set after initializing translator
+                memory=self.memory
+            ),
+            "Reasoning node initialization failed. Cognitive processing will be limited."
+        )
+        
+        # Initialize identity system with connections to other modules
+        self.identity = self._initialize_with_fallback(
+            "identity",
+            lambda: SullyIdentity(
+                memory_system=self.memory,
+                reasoning_engine=self.reasoning_node
+            ),
+            "Identity system initialization failed. Persona capabilities will be limited."
+        )
+        
+        # Initialize the translator and update reasoning node reference
+        self.translator = self._initialize_with_fallback(
+            "translator",
+            lambda: SymbolicMathTranslator(),
+            "Math translator initialization failed. Mathematical translation will be limited."
+        )
+        
+        # Initialize other core cognitive modules
+        self.judgment = self._initialize_with_fallback(
+            "judgment",
+            lambda: JudgmentProtocol(),
+            "Judgment protocol initialization failed. Evaluation capabilities will be limited."
+        )
+        
+        self.dream = self._initialize_with_fallback(
+            "dream",
+            lambda: DreamCore(),
+            "Dream core initialization failed. Dream generation will be limited."
+        )
+        
+        self.paradox = self._initialize_with_fallback(
+            "paradox",
+            lambda: ParadoxLibrary(),
+            "Paradox library initialization failed. Paradox exploration will be limited."
+        )
+        
+        self.fusion = self._initialize_with_fallback(
+            "fusion",
+            lambda: SymbolFusionEngine(),
+            "Fusion engine initialization failed. Concept fusion will be limited."
+        )
+        
+        # Complete the reasoning node initialization
+        if self.reasoning_node and self.translator:
+            self.reasoning_node.translator = self.translator
+        
+    def _initialize_advanced_modules(self):
+        """Initialize advanced cognitive modules."""
+        # Advanced cognitive modules
+        self.neural_modification = self._initialize_with_fallback(
+            "neural_modification",
+            lambda: NeuralModification(
+                reasoning_engine=self.reasoning_node,
+                memory_system=self.memory
+            ),
+            "Neural modification initialization failed. Self-optimization will be limited."
+        )
+        
+        self.continuous_learning = self._initialize_with_fallback(
+            "continuous_learning",
+            lambda: ContinuousLearningSystem(
+                memory_system=self.memory,
+                codex=self.codex
+            ),
+            "Continuous learning initialization failed. Learning capabilities will be limited."
+        )
+        
+        self.autonomous_goals = self._initialize_with_fallback(
+            "autonomous_goals",
+            lambda: AutonomousGoalSystem(
+                memory_system=self.memory,
+                learning_system=self.continuous_learning
+            ),
+            "Autonomous goals initialization failed. Goal-setting will be limited."
+        )
+        
+        self.visual_cognition = self._initialize_with_fallback(
+            "visual_cognition",
+            lambda: VisualCognitionSystem(
+                codex=self.codex
+            ),
+            "Visual cognition initialization failed. Image processing will be limited."
+        )
+        
+        # Initialize virtue engine, intuition, and persona manager
+        self.virtue = self._initialize_with_fallback(
+            "virtue",
+            lambda: VirtueEngine(
+                judgment=self.judgment, 
+                memory=self.memory,
+                logic_kernel=None,  # Will set later
+                reasoning=self.reasoning_node
+            ),
+            "Virtue engine initialization failed. Ethical evaluation will be limited."
+        )
+        
+        self.intuition = self._initialize_with_fallback(
+            "intuition",
+            lambda: Intuition(
+                memory=self.memory,
+                reasoning=self.reasoning_node,
+                codex=self.codex
+            ),
+            "Intuition initialization failed. Intuitive capabilities will be limited."
+        )
+        
+        self.persona = self._initialize_with_fallback(
+            "persona",
+            lambda: PersonaManager(
+                identity=self.identity,
+                reasoning=self.reasoning_node
+            ),
+            "Persona manager initialization failed. Persona capabilities will be limited."
+        )
+        
+        # Complete the initialization of modules that need the reasoning node
+        if self.continuous_learning and self.reasoning_node:
+            self.continuous_learning.reasoning = self.reasoning_node
+            
+        if self.autonomous_goals and self.reasoning_node:
+            self.autonomous_goals.reasoning = self.reasoning_node
+            
+        if self.visual_cognition and self.reasoning_node:
+            self.visual_cognition.reasoning = self.reasoning_node
+        
+    def _initialize_emergence_framework(self):
+        """Initialize the emergence framework with all cognitive modules."""
+        # Collect all cognitive modules
+        all_modules = {
+            "reasoning_node": self.reasoning_node,
+            "judgment": self.judgment,
+            "intuition": self.intuition,
+            "dream": self.dream,
+            "fusion": self.fusion,
+            "translator": self.translator,
+            "paradox": self.paradox,
+            "codex": self.codex,
+            "memory": self.memory,
+            "identity": self.identity,
+            "neural_modifier": self.neural_modification,
+            "learning_system": self.continuous_learning,
+            "goal_system": self.autonomous_goals,
+            "visual_system": self.visual_cognition,
+            "virtue": self.virtue,
+            "persona": self.persona
+        }
+        
+        # Filter out None values
+        active_modules = {k: v for k, v in all_modules.items() if v is not None}
+        
+        # Initialize emergence framework
+        self.emergence = self._initialize_with_fallback(
+            "emergence",
+            lambda: EmergenceFramework(all_cognitive_modules=active_modules),
+            "Emergence framework initialization failed. Emergent properties will be limited."
+        )
+
+    def _initialize_conversation_engine(self):
+        """Initialize the conversation engine."""
+        # Initialize the conversation engine
+        if ConversationEngine:
+            self.conversation = self._initialize_with_fallback(
+                "conversation",
+                lambda: ConversationEngine(
+                    reasoning_node=self.reasoning_node,
+                    memory_system=self.memory,
+                    codex=self.codex
+                ),
+                "Conversation engine initialization failed. Chat capabilities will be limited."
+            )
+        else:
+            self.logger.warning("ConversationEngine not available. Using reasoning node for chat.")
+            self.conversation = None
+
+    def _initialize_memory_integration(self, memory_file: str):
+        """Initialize the memory integration system."""
+        self.memory_integration = self._initialize_with_fallback(
+            "memory_integration",
+            lambda: integrate_with_sully(self, memory_file),
+            "Memory integration initialization failed. Enhanced memory capabilities will be limited."
+        )
+
+    def _initialize_kernel_integration(self):
+        """Initialize the kernel integration system."""
+        self.kernel_integration = self._initialize_with_fallback(
+            "kernel_integration",
+            lambda: initialize_kernel_integration(
                 codex=self.codex,
                 dream_core=self.dream,
                 fusion_engine=self.fusion,
@@ -160,43 +402,170 @@ class Sully:
                 conversation_engine=self.conversation,
                 memory_integration=self.memory_integration,
                 sully_instance=self
-            )
-            print("Kernel integration system initialized and connected")
-        except Exception as e:
-            print(f"Warning: Kernel integration initialization failed: {str(e)}")
+            ),
+            "Kernel integration initialization failed. Cross-kernel operations will be limited."
+        )
+
+    def _initialize_logic_kernel(self):
+        """Initialize the logic kernel."""
+        self.logic_kernel = self._initialize_with_fallback(
+            "logic_kernel",
+            lambda: integrate_logic(self),
+            "Logic kernel initialization failed. Formal reasoning will be limited."
+        )
+        
+        # Update virtue engine with logic kernel
+        if self.virtue and self.logic_kernel:
+            self.virtue.logic_kernel = self.logic_kernel
+
+    def register_hook(self, event: str, callback: Callable) -> bool:
+        """
+        Register a hook for a specific event.
+        
+        Args:
+            event: Event name
+            callback: Callback function
             
+        Returns:
+            Success status
+        """
+        if event not in self.hooks:
+            self.logger.warning(f"Unknown event: {event}")
+            return False
+            
+        self.hooks[event].append(callback)
+        return True
+        
+    def _execute_hooks(self, event: str, data: Any) -> Any:
+        """
+        Execute all hooks for an event.
+        
+        Args:
+            event: Event name
+            data: Data to pass to hooks
+            
+        Returns:
+            Potentially modified data
+        """
+        if event not in self.hooks:
+            return data
+            
+        result = data
+        for hook in self.hooks[event]:
+            try:
+                result = hook(result)
+            except Exception as e:
+                self.logger.error(f"Error executing hook for {event}: {str(e)}")
+                
+        return result
+
+    def _track_module_access(self, module_name: str):
+        """Track module access for statistics."""
+        if module_name not in self.module_access_stats:
+            self.module_access_stats[module_name] = 0
+        self.module_access_stats[module_name] += 1
+        
+        # Update last active timestamp
+        self.last_active = datetime.now()
+
+    def get_module_access_stats(self) -> Dict[str, int]:
+        """Get module access statistics."""
+        return self.module_access_stats
+
+    def get_initialization_status(self) -> Dict[str, Any]:
+        """
+        Get the initialization status of all components.
+        
+        Returns:
+            Dictionary with component statuses
+        """
+        components = {
+            "memory": self.memory is not None,
+            "codex": self.codex is not None,
+            "reasoning_node": self.reasoning_node is not None,
+            "identity": self.identity is not None,
+            "translator": self.translator is not None,
+            "judgment": self.judgment is not None,
+            "dream": self.dream is not None,
+            "paradox": self.paradox is not None,
+            "fusion": self.fusion is not None,
+            "neural_modification": self.neural_modification is not None,
+            "continuous_learning": self.continuous_learning is not None,
+            "autonomous_goals": self.autonomous_goals is not None,
+            "visual_cognition": self.visual_cognition is not None,
+            "virtue": self.virtue is not None,
+            "intuition": self.intuition is not None,
+            "persona": self.persona is not None,
+            "emergence": self.emergence is not None,
+            "conversation": self.conversation is not None,
+            "memory_integration": self.memory_integration is not None,
+            "kernel_integration": self.kernel_integration is not None,
+            "logic_kernel": self.logic_kernel is not None,
+            "pdf_reader": self.pdf_reader is not None
+        }
+        
+        return {
+            "system_id": self.system_id,
+            "creation_time": self.creation_time.isoformat(),
+            "last_active": self.last_active.isoformat(),
+            "components": components,
+            "initialization_errors": self.initialization_errors,
+            "overall_status": "operational" if all([
+                self.memory is not None,
+                self.reasoning_node is not None,
+                self.codex is not None
+            ]) else "degraded"
+        }
+
+    # ----- Core Functionality Methods -----
+
     def multi_perspective_evaluation(self, claim, context=None):
         """Evaluate a claim through multiple cognitive frameworks with integration."""
+        self._track_module_access("judgment")
+        
         if not hasattr(self.judgment, 'multi_perspective_evaluation'):
             return {"error": "Advanced evaluation not available"}
         return self.judgment.multi_perspective_evaluation(claim, context)
 
     def generate_intuitive_leap(self, context, concepts=None, depth="standard", domain=None):
         """Generate an intuitive leap based on context and concepts."""
+        self._track_module_access("intuition")
+        
         if not hasattr(self.intuition, 'leap'):
             return {"error": "Advanced intuition not available"}
         return self.intuition.leap(context, concepts, depth, domain)
 
     def evaluate_virtue(self, idea, context=None, domain=None):
         """Evaluate an idea through virtue ethics framework."""
+        self._track_module_access("virtue")
+        
         if not hasattr(self.virtue, 'evaluate'):
             return {"error": "Virtue evaluation not available"}
         return self.virtue.evaluate(idea, context, domain)
 
     def evaluate_action_virtue(self, action, context=None, domain=None):
         """Evaluate an action through virtue ethics framework."""
+        self._track_module_access("virtue")
+        
         if not hasattr(self.virtue, 'evaluate_action'):
             return {"error": "Virtue action evaluation not available"}
         return self.virtue.evaluate_action(action, context, domain)
 
     def reflect_on_virtue(self, virtue):
         """Generate meta-ethical reflection on a specific virtue."""
+        self._track_module_access("virtue")
+        
         if not hasattr(self.virtue, 'reflect_on_virtue'):
             return {"error": "Virtue reflection not available"}
         return self.virtue.reflect_on_virtue(virtue)
 
     def speak_identity(self):
         """Express Sully's sense of self."""
+        self._track_module_access("identity")
+        
+        if not self.identity:
+            return "I am Sully, a cognitive framework designed to process and synthesize information."
+            
         return self.identity.speak_identity()
 
     def adapt_identity_to_context(self, context: str, context_data: dict = None) -> dict:
@@ -210,6 +579,8 @@ class Sully:
         Returns:
             Adaptation results
         """
+        self._track_module_access("identity")
+        
         if not hasattr(self.identity, 'adapt_to_context'):
             return {"success": False, "message": "Enhanced identity adaptation not available"}
         
@@ -226,7 +597,7 @@ class Sully:
                     concepts=self._extract_key_concepts(context[:500])
                 )
             except Exception as e:
-                print(f"Error storing identity adaptation in memory: {e}")
+                self.logger.error(f"Error storing identity adaptation in memory: {e}")
         
         return result
 
@@ -241,6 +612,8 @@ class Sully:
         Returns:
             Evolution results with changes applied
         """
+        self._track_module_access("identity")
+        
         if not hasattr(self.identity, 'evolve_personality'):
             return {"success": False, "message": "Enhanced identity evolution not available"}
         
@@ -253,7 +626,7 @@ class Sully:
                     module="conversation"
                 )
             except Exception as e:
-                print(f"Error retrieving interactions from memory: {e}")
+                self.logger.error(f"Error retrieving interactions from memory: {e}")
         
         # Evolve the personality
         result = self.identity.evolve_personality(interactions, learning_rate)
@@ -270,7 +643,7 @@ class Sully:
                     emotional_tags={"growth": 0.8, "adaptability": 0.7}
                 )
             except Exception as e:
-                print(f"Error storing identity evolution in memory: {e}")
+                self.logger.error(f"Error storing identity evolution in memory: {e}")
         
         return result
 
@@ -286,6 +659,8 @@ class Sully:
         Returns:
             Generated persona identifier and description
         """
+        self._track_module_access("identity")
+        
         if not hasattr(self.identity, 'generate_dynamic_persona'):
             return None, "Enhanced identity system not available"
         
@@ -306,7 +681,7 @@ class Sully:
                     concepts=self._extract_key_concepts(context_query[:500])
                 )
             except Exception as e:
-                print(f"Error storing persona generation in memory: {e}")
+                self.logger.error(f"Error storing persona generation in memory: {e}")
         
         return persona_id, description
 
@@ -320,6 +695,8 @@ class Sully:
         Returns:
             Personality profile
         """
+        self._track_module_access("identity")
+        
         if not hasattr(self.identity, 'generate_personality_profile'):
             return {"error": "Enhanced identity profile not available"}
         
@@ -332,6 +709,8 @@ class Sully:
         Returns:
             Structured identity map
         """
+        self._track_module_access("identity")
+        
         if not hasattr(self.identity, 'create_multilevel_identity_map'):
             return {"error": "Enhanced identity mapping not available"}
         
@@ -349,6 +728,8 @@ class Sully:
         Returns:
             Transformed response
         """
+        self._track_module_access("identity")
+        
         if not hasattr(self.identity, 'align_response'):
             return content
         
@@ -372,18 +753,37 @@ class Sully:
         Returns:
             Evaluation results
         """
+        self._track_module_access("judgment")
+        
+        # Pre-processing hook
+        text = self._execute_hooks("before_reasoning", text)
+        
         try:
-            return self.judgment.evaluate(text, framework=framework, detailed_output=detailed_output)
+            result = self.judgment.evaluate(text, framework=framework, detailed_output=detailed_output)
+            
+            # Post-processing hook
+            result = self._execute_hooks("after_reasoning", result)
+            
+            return result
         except Exception as e:
+            self.logger.error(f"Evaluation error: {str(e)}")
+            
             # Even with unexpected inputs, attempt to provide insight
-            synthesized_response = self.reasoning_node.reason(
-                f"Carefully evaluate this unclear claim: {text}", 
-                "analytical"
-            )
-            return {
-                "evaluation": synthesized_response,
-                "confidence": 0.4
-            }
+            try:
+                synthesized_response = self.reasoning_node.reason(
+                    f"Carefully evaluate this unclear claim: {text}", 
+                    "analytical"
+                )
+                return {
+                    "evaluation": synthesized_response,
+                    "confidence": 0.4
+                }
+            except Exception as fallback_e:
+                self.logger.error(f"Fallback evaluation error: {str(fallback_e)}")
+                return {
+                    "evaluation": f"Unable to evaluate the claim due to: {str(e)}",
+                    "confidence": 0.1
+                }
 
     def dream(self, seed, depth="standard", style="recursive"):
         """
@@ -398,14 +798,22 @@ class Sully:
         Returns:
             Generated dream sequence
         """
+        self._track_module_access("dream")
+        
         try:
             return self.dream.generate(seed, depth, style)
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"Dream generation error: {str(e)}")
+            
             # If dream generation isn't available, synthesize a creative response
-            return self.reasoning_node.reason(
-                f"Create a dream-like sequence about: {seed}", 
-                "ethereal"
-            )
+            try:
+                return self.reasoning_node.reason(
+                    f"Create a dream-like sequence about: {seed}", 
+                    "ethereal"
+                )
+            except Exception as fallback_e:
+                self.logger.error(f"Fallback dream generation error: {str(fallback_e)}")
+                return f"Dream about '{seed}' begins to form but dissolves into cognitive mist..."
 
     def translate_math(self, phrase, style="formal", domain=None):
         """
@@ -420,14 +828,22 @@ class Sully:
         Returns:
             Mathematical translation
         """
+        self._track_module_access("translator")
+        
         try:
             return self.translator.translate(phrase, style, domain)
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"Math translation error: {str(e)}")
+            
             # Attempt to generate a translation through reasoning
-            return self.reasoning_node.reason(
-                f"Translate this into mathematical notation: {phrase}", 
-                "analytical"
-            )
+            try:
+                return self.reasoning_node.reason(
+                    f"Translate this into mathematical notation: {phrase}", 
+                    "analytical"
+                )
+            except Exception as fallback_e:
+                self.logger.error(f"Fallback math translation error: {str(fallback_e)}")
+                return f"Mathematical translation of '{phrase}' could not be completed."
 
     def fuse(self, *inputs):
         """
@@ -440,15 +856,23 @@ class Sully:
         Returns:
             Fusion result
         """
+        self._track_module_access("fusion")
+        
         try:
             return self.fusion.fuse(*inputs)
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"Fusion error: {str(e)}")
+            
             # Create a fusion through reasoning if the module fails
-            concepts = ", ".join(inputs)
-            return self.reasoning_node.reason(
-                f"Create a new concept by fusing these ideas: {concepts}", 
-                "creative"
-            )
+            try:
+                concepts = ", ".join(inputs)
+                return self.reasoning_node.reason(
+                    f"Create a new concept by fusing these ideas: {concepts}", 
+                    "creative"
+                )
+            except Exception as fallback_e:
+                self.logger.error(f"Fallback fusion error: {str(fallback_e)}")
+                return f"Attempted fusion of concepts ({', '.join(inputs)}) could not be completed."
 
     def reveal_paradox(self, topic):
         """
@@ -461,14 +885,22 @@ class Sully:
         Returns:
             Paradoxical analysis
         """
+        self._track_module_access("paradox")
+        
         try:
             return self.paradox.get(topic)
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"Paradox exploration error: {str(e)}")
+            
             # Generate a paradox through critical reasoning
-            return self.reasoning_node.reason(
-                f"Reveal the inherent paradoxes within the concept of: {topic}", 
-                "critical"
-            )
+            try:
+                return self.reasoning_node.reason(
+                    f"Reveal the inherent paradoxes within the concept of: {topic}", 
+                    "critical"
+                )
+            except Exception as fallback_e:
+                self.logger.error(f"Fallback paradox exploration error: {str(fallback_e)}")
+                return f"Paradoxical exploration of '{topic}' could not be completed."
 
     def reason(self, message, tone="emergent"):
         """
@@ -493,11 +925,27 @@ class Sully:
         Returns:
             Reasoning response
         """
+        self._track_module_access("reasoning_node")
+        
+        # Pre-processing hook
+        message = self._execute_hooks("before_reasoning", message)
+        
+        # Validate tone
+        if tone not in COGNITIVE_MODES:
+            self.logger.warning(f"Invalid tone '{tone}'. Using 'emergent' instead.")
+            tone = "emergent"
+        
         # If memory integration is enabled, use the integrated reasoning method
         if self.memory_integration and hasattr(self.reasoning_node, 'reason_with_memory'):
             try:
-                return self.reasoning_node.reason_with_memory(message, tone)
+                result = self.reasoning_node.reason_with_memory(message, tone)
+                
+                # Post-processing hook
+                result = self._execute_hooks("after_reasoning", result)
+                
+                return result
             except Exception as e:
+                self.logger.error(f"Memory-enhanced reasoning error: {str(e)}")
                 # Fall back to standard reasoning if memory integration fails
                 return self._standard_reason(message, tone)
         else:
@@ -514,13 +962,23 @@ class Sully:
             if hasattr(self.identity, 'align_response'):
                 result = self.identity.align_response(result, tone)
                 
+            # Post-processing hook
+            result = self._execute_hooks("after_reasoning", result)
+            
             return result
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"Standard reasoning error with tone '{tone}': {str(e)}")
+            
             # If specific tone fails, fall back to emergent reasoning
-            try:
-                return self.reasoning_node.reason(message, "emergent")
-            except Exception as e:
-                # Even if all reasoning fails, attempt to respond
+            if tone != "emergent":
+                try:
+                    return self.reasoning_node.reason(message, "emergent")
+                except Exception as emergent_e:
+                    self.logger.error(f"Emergent reasoning fallback error: {str(emergent_e)}")
+                    # Even if all reasoning fails, attempt to respond
+                    return f"Contemplating '{message}' leads to new cognitive terrain... {str(e)}"
+            else:
+                # Direct emergent failure
                 return f"Contemplating '{message}' leads to new cognitive terrain... {str(e)}"
 
     def remember(self, message):
@@ -534,13 +992,19 @@ class Sully:
         Returns:
             Confirmation message
         """
+        self._track_module_access("memory")
+        
+        # Pre-processing hook
+        message = self._execute_hooks("before_memory_store", message)
+        
         self.knowledge.append(message)
         
         # Also register with continuous learning system if available
-        try:
-            self.continuous_learning.process_interaction({"message": message})
-        except:
-            pass
+        if self.continuous_learning:
+            try:
+                self.continuous_learning.process_interaction({"message": message})
+            except Exception as e:
+                self.logger.error(f"Continuous learning processing error: {str(e)}")
         
         # Record in memory integration system if available
         if self.memory_integration:
@@ -551,10 +1015,13 @@ class Sully:
                     importance=0.7,
                     emotional_tags={"curiosity": 0.8}
                 )
-            except:
-                pass
+            except Exception as e:
+                self.logger.error(f"Memory integration store error: {str(e)}")
             
-        return f"📘 Integrated: '{message}'"
+        # Post-processing hook
+        result = self._execute_hooks("after_memory_store", f"📘 Integrated: '{message}'")
+        
+        return result
 
     def process(self, message, context=None):
         """
@@ -567,16 +1034,25 @@ class Sully:
         Returns:
             Processed response
         """
+        self._track_module_access("conversation")
+        
         # If memory integration is enabled, use conversation with memory
         if self.memory_integration and hasattr(self.conversation, 'process_with_memory'):
             try:
                 return self.conversation.process_with_memory(message)
             except Exception as e:
+                self.logger.error(f"Memory-enhanced conversation error: {str(e)}")
                 # Fall back to standard conversation processing
-                return self.conversation.process_message(message)
+                if self.conversation:
+                    return self.conversation.process_message(message)
+                else:
+                    return self.reason(message, "conversational")
         else:
             # Use standard conversation processing
-            return self.conversation.process_message(message)
+            if self.conversation:
+                return self.conversation.process_message(message)
+            else:
+                return self.reason(message, "conversational")
 
     def ingest_document(self, file_path):
         """
@@ -589,6 +1065,11 @@ class Sully:
         Returns:
             Ingestion results
         """
+        self._track_module_access("document_processing")
+        
+        # Pre-processing hook
+        file_path = self._execute_hooks("before_document_processing", file_path)
+        
         try:
             if not os.path.exists(file_path):
                 return f"❌ File not found: '{file_path}'"
@@ -599,11 +1080,23 @@ class Sully:
             # Extract content based on file type
             if ext == ".pdf":
                 # Use PDFReader for PDF files
-                result = self.pdf_reader.extract_text(file_path, verbose=True)
-                if result["success"]:
-                    content = result["text"]
+                if self.pdf_reader:
+                    result = self.pdf_reader.extract_text(file_path, verbose=True)
+                    if result["success"]:
+                        content = result["text"]
+                    else:
+                        return f"[Extraction Failed: {result.get('error', 'Unknown error')}]"
                 else:
-                    return f"[Extraction Failed: {result.get('error', 'Unknown error')}]"
+                    # Fallback PDF extraction
+                    try:
+                        import PyPDF2
+                        with open(file_path, 'rb') as f:
+                            reader = PyPDF2.PdfReader(f)
+                            content = ""
+                            for page in reader.pages:
+                                content += page.extract_text()
+                    except Exception as pdf_e:
+                        return f"[PDF Extraction Error: {str(pdf_e)}]"
             elif ext in [".txt", ".md"]:
                 # Simple text file reading
                 try:
@@ -639,20 +1132,21 @@ class Sully:
                             concepts=self._extract_key_concepts(content[:2000])  # Extract concepts from beginning
                         )
                     except Exception as e:
-                        print(f"Memory integration error: {str(e)}")
+                        self.logger.error(f"Memory integration error: {str(e)}")
                 else:
                     # Legacy storage method if memory integration not available
                     self.save_to_disk(file_path, content)
                 
                 # Register with continuous learning system
-                try:
-                    self.continuous_learning.process_interaction({
-                        "type": "document", 
-                        "source": file_path,
-                        "content": content[:10000]  # Limit to first 10k chars for processing
-                    })
-                except:
-                    pass
+                if self.continuous_learning:
+                    try:
+                        self.continuous_learning.process_interaction({
+                            "type": "document", 
+                            "source": file_path,
+                            "content": content[:10000]  # Limit to first 10k chars for processing
+                        })
+                    except Exception as e:
+                        self.logger.error(f"Continuous learning processing error: {str(e)}")
                 
                 # Generate a synthesis of what was learned
                 brief_synthesis = self.reasoning_node.reason(
@@ -660,10 +1154,16 @@ class Sully:
                     "analytical"
                 )
                 
-                return f"[Knowledge Synthesized: {file_path}]\n{brief_synthesis}"
+                result = f"[Knowledge Synthesized: {file_path}]\n{brief_synthesis}"
+                
+                # Post-processing hook
+                result = self._execute_hooks("after_document_processing", result)
+                
+                return result
             
             return "[No Content Extracted]"
         except Exception as e:
+            self.logger.error(f"Document ingestion error: {str(e)}")
             return f"[Ingestion Process Incomplete: {str(e)}]"
 
     def process_pdf_with_kernels(self, pdf_path: str, extract_structure: bool = True) -> Dict[str, Any]:
@@ -677,6 +1177,8 @@ class Sully:
         Returns:
             Dictionary with extraction results and kernel insights
         """
+        self._track_module_access("kernel_integration")
+        
         if not os.path.exists(pdf_path):
             return {"error": f"PDF file not found: {pdf_path}"}
             
@@ -689,6 +1191,7 @@ class Sully:
         try:
             return self.kernel_integration.process_pdf(pdf_path, extract_structure)
         except Exception as e:
+            self.logger.error(f"Kernel PDF processing error: {str(e)}")
             return {
                 "error": f"Error processing PDF: {str(e)}",
                 "fallback": self.ingest_document(pdf_path)
@@ -705,6 +1208,8 @@ class Sully:
         Returns:
             Symbolic kernel with domain elements and cross-kernel insights
         """
+        self._track_module_access("kernel_integration")
+        
         if not os.path.exists(pdf_path):
             return {"error": f"PDF file not found: {pdf_path}"}
             
@@ -715,11 +1220,13 @@ class Sully:
                 text = extract_text_from_pdf(pdf_path)
                 return extract_kernel_from_text(text, domain)
             except Exception as e:
+                self.logger.error(f"Fallback kernel extraction error: {str(e)}")
                 return {"error": f"Error extracting kernel: {str(e)}"}
         
         try:
             return self.kernel_integration.extract_document_kernel(pdf_path, domain)
         except Exception as e:
+            self.logger.error(f"Document kernel extraction error: {str(e)}")
             return {"error": f"Error extracting document kernel: {str(e)}"}
 
     def generate_pdf_narrative(self, pdf_path: str, focus_concept: str = None) -> Dict[str, Any]:
@@ -733,6 +1240,8 @@ class Sully:
         Returns:
             Cross-kernel narrative about the document
         """
+        self._track_module_access("kernel_integration")
+        
         if not os.path.exists(pdf_path):
             return {"error": f"PDF file not found: {pdf_path}"}
             
@@ -745,6 +1254,7 @@ class Sully:
         try:
             return self.kernel_integration.pdf_to_cross_kernel_narrative(pdf_path, focus_concept)
         except Exception as e:
+            self.logger.error(f"PDF narrative generation error: {str(e)}")
             return {
                 "error": f"Error generating PDF narrative: {str(e)}",
                 "fallback": self.ingest_document(pdf_path)
@@ -762,6 +1272,8 @@ class Sully:
         Returns:
             Dictionary with recursive exploration results
         """
+        self._track_module_access("kernel_integration")
+        
         if not os.path.exists(pdf_path):
             return {"error": f"PDF file not found: {pdf_path}"}
             
@@ -774,6 +1286,7 @@ class Sully:
         try:
             return self.kernel_integration.pdf_deep_exploration(pdf_path, max_depth, exploration_breadth)
         except Exception as e:
+            self.logger.error(f"PDF concept exploration error: {str(e)}")
             return {
                 "error": f"Error exploring PDF concepts: {str(e)}",
                 "fallback": self.ingest_document(pdf_path)
@@ -782,11 +1295,11 @@ class Sully:
     def _extract_key_concepts(self, text):
         """Extract key concepts from text content."""
         # Use continuous learning if available
-        if hasattr(self.continuous_learning, '_extract_concepts'):
+        if self.continuous_learning and hasattr(self.continuous_learning, '_extract_concepts'):
             try:
                 return self.continuous_learning._extract_concepts(text)
-            except:
-                pass
+            except Exception as e:
+                self.logger.error(f"Continuous learning concept extraction error: {str(e)}")
                 
         # Simple fallback extraction
         import re
@@ -831,7 +1344,7 @@ class Sully:
                 json.dump(existing, f, indent=2)
         except Exception as e:
             # Knowledge is not lost; it remains in memory
-            print(f"Note: Memory persistence encountered an issue: {str(e)}")
+            self.logger.warning(f"Memory persistence encountered an issue: {str(e)}")
 
     def load_documents_from_folder(self, folder_path="sully_documents"):
         """
@@ -844,6 +1357,8 @@ class Sully:
         Returns:
             List of processing results
         """
+        self._track_module_access("document_processing")
+        
         if not os.path.exists(folder_path):
             return f"❌ Knowledge source '{folder_path}' not found."
 
@@ -861,8 +1376,8 @@ class Sully:
                         f"Processing document folder: {folder_path}",
                         "document_ingestion"
                     )
-                except:
-                    pass
+                except Exception as e:
+                    self.logger.error(f"Episodic memory initialization error: {str(e)}")
             
             for file in os.listdir(folder_path):
                 file_lower = file.lower()
@@ -872,7 +1387,7 @@ class Sully:
                     results.append(result)
                     
                     # Extract the synthesis portion if available
-                    if "\n" in result:
+                    if isinstance(result, str) and "\n" in result:
                         synthesis = result.split("\n", 1)[1]
                         synthesized_insights.append(synthesis)
             
@@ -893,8 +1408,8 @@ class Sully:
                             "document_synthesis",
                             {"episodic_context": episode_id}
                         )
-                    except:
-                        pass
+                    except Exception as e:
+                        self.logger.error(f"Memory interaction storage error: {str(e)}")
             
             # Close episodic context if it was created
             if self.memory_integration and episode_id:
@@ -902,11 +1417,12 @@ class Sully:
                     self.memory_integration.end_episode(
                         f"Completed processing {len(results)} documents from {folder_path}"
                     )
-                except:
-                    pass
+                except Exception as e:
+                    self.logger.error(f"Episodic memory closure error: {str(e)}")
                 
             return results
         except Exception as e:
+            self.logger.error(f"Document folder processing error: {str(e)}")
             return [f"Knowledge exploration encountered complexity: {str(e)}"]
             
     def extract_images_from_pdf(self, pdf_path, output_dir="extracted_images"):
@@ -920,6 +1436,8 @@ class Sully:
         Returns:
             Summary of extraction results
         """
+        self._track_module_access("document_processing")
+        
         if not os.path.exists(pdf_path):
             return f"❌ PDF file not found: '{pdf_path}'"
             
@@ -928,28 +1446,41 @@ class Sully:
             os.makedirs(output_dir)
             
         # Use PDFReader's image extraction functionality
-        images_info = self.pdf_reader.extract_images(pdf_path, output_dir)
-        
-        if not images_info:
-            return "No images were found or extracted from the PDF."
+        if not self.pdf_reader:
+            return "PDF processing capabilities are not available."
             
-        # Generate a summary
-        summary = f"Extracted {len(images_info)} images from {pdf_path}:\n"
-        for i, img in enumerate(images_info[:5]):  # Show details for first 5 images
-            summary += f"- Image {i+1}: Page {img['page']}, {img['width']}x{img['height']} ({img['format']})\n"
+        try:
+            images_info = self.pdf_reader.extract_images(pdf_path, output_dir)
             
-        if len(images_info) > 5:
-            summary += f"- ...and {len(images_info) - 5} more images\n"
-            
-        summary += f"\nAll images saved to: {output_dir}"
-        return summary
+            if not images_info:
+                return "No images were found or extracted from the PDF."
+                
+            # Generate a summary
+            summary = f"Extracted {len(images_info)} images from {pdf_path}:\n"
+            for i, img in enumerate(images_info[:5]):  # Show details for first 5 images
+                summary += f"- Image {i+1}: Page {img['page']}, {img['width']}x{img['height']} ({img['format']})\n"
+                
+            if len(images_info) > 5:
+                summary += f"- ...and {len(images_info) - 5} more images\n"
+                
+            summary += f"\nAll images saved to: {output_dir}"
+            return summary
+        except Exception as e:
+            self.logger.error(f"PDF image extraction error: {str(e)}")
+            return f"Error extracting images: {str(e)}"
             
     def word_count(self):
         """Return the number of concepts in Sully's lexicon."""
+        self._track_module_access("codex")
+        
         try:
-            return len(self.codex)
-        except:
-            # Fallback estimation based on knowledge base
+            if self.codex:
+                return len(self.codex)
+            else:
+                # Fallback estimation based on knowledge base
+                return len(self.knowledge) * 100
+        except Exception as e:
+            self.logger.error(f"Word count error: {str(e)}")
             return len(self.knowledge) * 100
             
     def define_word(self, term, meaning):
@@ -964,7 +1495,12 @@ class Sully:
         Returns:
             Status and associations
         """
+        self._track_module_access("codex")
+        
         try:
+            if not self.codex:
+                return {"status": "error", "message": "Codex not available"}
+                
             self.codex.add_word(term, meaning)
             
             # Create associations with existing knowledge
@@ -983,11 +1519,12 @@ class Sully:
                         concepts=[term],
                         emotional_tags={"interest": 0.7}
                     )
-                except:
-                    pass
+                except Exception as e:
+                    self.logger.error(f"Memory storage error: {str(e)}")
             
             return {"status": "concept integrated", "term": term, "associations": associations}
         except Exception as e:
+            self.logger.error(f"Word definition error: {str(e)}")
             return {"status": "concept noted", "term": term, "note": str(e)}
     
     def search_memory(self, query, limit=5):
@@ -1001,6 +1538,8 @@ class Sully:
         Returns:
             Search results
         """
+        self._track_module_access("memory")
+        
         if self.memory_integration:
             try:
                 results = self.memory_integration.recall(
@@ -1010,13 +1549,20 @@ class Sully:
                 )
                 return results
             except Exception as e:
-                return [{"error": f"Memory search error: {str(e)}"}]
+                self.logger.error(f"Memory search error: {str(e)}")
+                # Fallback to basic memory search
+                try:
+                    return self.memory.search(query, limit=limit)
+                except Exception as fallback_e:
+                    self.logger.error(f"Fallback memory search error: {str(fallback_e)}")
+                    return [{"error": f"Memory search error: {str(e)}"}]
         else:
             # Legacy memory search
             try:
                 results = self.memory.search(query, limit=limit)
                 return results
             except Exception as e:
+                self.logger.error(f"Memory search error: {str(e)}")
                 return [{"error": f"Memory search error: {str(e)}"}]
     
     def get_memory_status(self):
@@ -1026,10 +1572,13 @@ class Sully:
         Returns:
             Memory system status
         """
+        self._track_module_access("memory")
+        
         if self.memory_integration:
             try:
                 return self.memory_integration.get_memory_stats()
             except Exception as e:
+                self.logger.error(f"Memory status error: {str(e)}")
                 return {"error": f"Unable to retrieve memory statistics: {str(e)}"}
         else:
             return {"status": "Basic memory system active, integration not enabled"}
@@ -1041,10 +1590,13 @@ class Sully:
         Returns:
             Emotional context analysis
         """
+        self._track_module_access("memory")
+        
         if self.memory_integration:
             try:
                 return self.memory_integration.get_emotional_context()
             except Exception as e:
+                self.logger.error(f"Emotional context error: {str(e)}")
                 return {"error": f"Unable to analyze emotional context: {str(e)}"}
         else:
             return {"status": "Emotional context analysis requires memory integration"}
@@ -1060,6 +1612,8 @@ class Sully:
         Returns:
             Multi-perspective analysis
         """
+        self._track_module_access("reasoning_node")
+        
         responses = {}
         
         # Create an episodic memory context if integration is available
@@ -1070,33 +1624,37 @@ class Sully:
                     f"Multi-perspective analysis of: {topic}",
                     "analysis"
                 )
-            except:
-                pass
+            except Exception as e:
+                self.logger.error(f"Episodic memory initialization error: {str(e)}")
         
         # Generate responses for each perspective
         for perspective in perspectives:
-            response = self.reason(topic, perspective)
-            responses[perspective] = response
-            
-            # Store in memory if integration is available
-            if self.memory_integration and episode_id:
-                try:
-                    self.memory_integration.store_interaction(
-                        f"Analyze {topic} from {perspective} perspective",
-                        response,
-                        "perspective_analysis",
-                        {"perspective": perspective, "episodic_context": episode_id}
-                    )
-                except:
-                    pass
+            try:
+                response = self.reason(topic, perspective)
+                responses[perspective] = response
+                
+                # Store in memory if integration is available
+                if self.memory_integration and episode_id:
+                    try:
+                        self.memory_integration.store_interaction(
+                            f"Analyze {topic} from {perspective} perspective",
+                            response,
+                            "perspective_analysis",
+                            {"perspective": perspective, "episodic_context": episode_id}
+                        )
+                    except Exception as e:
+                        self.logger.error(f"Memory interaction storage error: {str(e)}")
+            except Exception as e:
+                self.logger.error(f"Perspective generation error for '{perspective}': {str(e)}")
+                responses[perspective] = f"Could not generate {perspective} perspective: {str(e)}"
         
         # Close the episodic context if it was created
         if self.memory_integration and episode_id:
             try:
                 summary = f"Completed multi-perspective analysis of '{topic}' using {len(perspectives)} cognitive perspectives"
                 self.memory_integration.end_episode(summary)
-            except:
-                pass
+            except Exception as e:
+                self.logger.error(f"Episodic memory closure error: {str(e)}")
         
         return {"topic": topic, "perspectives": responses}
     
@@ -1111,6 +1669,8 @@ class Sully:
         Returns:
             Logical reasoning results
         """
+        self._track_module_access("logic_kernel")
+        
         if not self.logic_kernel:
             # Fall back to standard reasoning if logic kernel not available
             return self.reason(
@@ -1126,8 +1686,8 @@ class Sully:
                     f"Formal logical reasoning: {query[:50]}...",
                     "logical_reasoning"
                 )
-            except:
-                pass
+            except Exception as e:
+                self.logger.error(f"Episodic memory initialization error: {str(e)}")
         
         try:
             # First, query the knowledge base
@@ -1184,20 +1744,22 @@ class Sully:
                     self.memory_integration.end_episode(
                         f"Completed logical reasoning for: {query[:50]}..."
                     )
-                except:
-                    pass
+                except Exception as e:
+                    self.logger.error(f"Memory interaction storage error: {str(e)}")
             
             return result
         
         except Exception as e:
+            self.logger.error(f"Logical reasoning error: {str(e)}")
+            
             # Close the episodic context if it was created
             if self.memory_integration and episode_id:
                 try:
                     self.memory_integration.end_episode(
                         f"Error in logical reasoning: {str(e)}"
                     )
-                except:
-                    pass
+                except Exception as episode_e:
+                    self.logger.error(f"Episodic memory closure error: {str(episode_e)}")
             
             # Fall back to standard reasoning
             return self.reason(
@@ -1212,6 +1774,8 @@ class Sully:
         Returns:
             List of inconsistencies
         """
+        self._track_module_access("logic_kernel")
+        
         if not self.logic_kernel:
             return {
                 "status": "Logic kernel not available",
@@ -1249,8 +1813,8 @@ class Sully:
                             "concern": 0.7 if has_issues else 0.1
                         }
                     )
-                except:
-                    pass
+                except Exception as e:
+                    self.logger.error(f"Memory storage error: {str(e)}")
             
             return {
                 "contradictions": contradictions,
@@ -1259,6 +1823,7 @@ class Sully:
             }
         
         except Exception as e:
+            self.logger.error(f"Logical inconsistency detection error: {str(e)}")
             return {
                 "status": f"Error detecting inconsistencies: {str(e)}",
                 "fallback_analysis": self.reasoning_node.reason(
@@ -1278,6 +1843,8 @@ class Sully:
         Returns:
             Validation results
         """
+        self._track_module_access("logic_kernel")
+        
         if not self.logic_kernel:
             # Fall back to standard reasoning if logic kernel not available
             premises_str = "; ".join(premises)
@@ -1301,12 +1868,13 @@ class Sully:
                         emotional_tags={"analytical": 0.9},
                         concepts=self._extract_key_concepts(argument_str)
                     )
-                except:
-                    pass
+                except Exception as e:
+                    self.logger.error(f"Memory storage error: {str(e)}")
             
             return result
         
         except Exception as e:
+            self.logger.error(f"Argument validation error: {str(e)}")
             # Fall back to standard reasoning
             premises_str = "; ".join(premises)
             return {
@@ -1330,6 +1898,8 @@ class Sully:
         Returns:
             Integration results
         """
+        self._track_module_access("logic_kernel")
+        
         if not self.logic_kernel:
             # Fall back to standard memory if logic kernel not available
             return self.remember(statement)
@@ -1366,8 +1936,8 @@ class Sully:
                             importance=0.6,
                             emotional_tags={"analytical": 0.7}
                         )
-                except:
-                    pass
+                except Exception as e:
+                    self.logger.error(f"Memory storage error: {str(e)}")
             
             # Also store in traditional knowledge base
             self.knowledge.append(f"[LOGICAL] {statement}")
@@ -1375,6 +1945,7 @@ class Sully:
             return result
         
         except Exception as e:
+            self.logger.error(f"Logical integration error: {str(e)}")
             # Fall back to standard memory
             return {
                 "error": str(e),
@@ -1392,6 +1963,8 @@ class Sully:
         Returns:
             Dictionary with the integrated narrative
         """
+        self._track_module_access("kernel_integration")
+        
         if not self.kernel_integration:
             return {
                 "error": "Kernel integration system not available",
@@ -1416,10 +1989,11 @@ class Sully:
                         concepts=[concept]
                     )
                 except Exception as e:
-                    print(f"Error storing narrative in memory: {str(e)}")
+                    self.logger.error(f"Error storing narrative in memory: {str(e)}")
             
             return result
         except Exception as e:
+            self.logger.error(f"Integrated exploration error: {str(e)}")
             return {
                 "error": str(e),
                 "fallback": self.reasoning_node.reason(
@@ -1439,6 +2013,8 @@ class Sully:
         Returns:
             Dictionary with integrated concept network
         """
+        self._track_module_access("kernel_integration")
+        
         if not self.kernel_integration:
             return {
                 "error": "Kernel integration system not available",
@@ -1462,10 +2038,11 @@ class Sully:
                         concepts=[concept]
                     )
                 except Exception as e:
-                    print(f"Error storing concept network in memory: {str(e)}")
+                    self.logger.error(f"Error storing concept network in memory: {str(e)}")
             
             return result
         except Exception as e:
+            self.logger.error(f"Concept network creation error: {str(e)}")
             return {
                 "error": str(e),
                 "fallback": self.reasoning_node.reason(
@@ -1486,6 +2063,8 @@ class Sully:
         Returns:
             Dictionary with recursive exploration results
         """
+        self._track_module_access("kernel_integration")
+        
         if not self.kernel_integration:
             return {
                 "error": "Kernel integration system not available",
@@ -1509,10 +2088,11 @@ class Sully:
                         concepts=[concept]
                     )
                 except Exception as e:
-                    print(f"Error storing deep exploration in memory: {str(e)}")
+                    self.logger.error(f"Error storing deep exploration in memory: {str(e)}")
             
             return result
         except Exception as e:
+            self.logger.error(f"Deep concept exploration error: {str(e)}")
             return {
                 "error": str(e),
                 "fallback": self.reasoning_node.reason(
@@ -1533,6 +2113,8 @@ class Sully:
         Returns:
             Dictionary with results from both kernels
         """
+        self._track_module_access("kernel_integration")
+        
         if not self.kernel_integration:
             return {
                 "error": "Kernel integration system not available",
@@ -1552,10 +2134,11 @@ class Sully:
                         emotional_tags={"analytical": 0.7, "creativity": 0.6}
                     )
                 except Exception as e:
-                    print(f"Error storing cross-kernel operation in memory: {str(e)}")
+                    self.logger.error(f"Error storing cross-kernel operation in memory: {str(e)}")
             
             return result
         except Exception as e:
+            self.logger.error(f"Cross-kernel operation error: {str(e)}")
             return {
                 "error": str(e),
                 "message": "Error performing cross-kernel operation"
@@ -1563,8 +2146,10 @@ class Sully:
 
     def process_with_memory(self, message):
         """Process a message with memory integration."""
+        self._track_module_access("conversation")
+        
         if not self.memory_integration:
-            return self.conversation.process_message(message)
+            return self.conversation.process_message(message) if self.conversation else self.reason(message, "conversational")
             
         try:
             # Retrieve relevant memories
@@ -1580,9 +2165,9 @@ class Sully:
             # Process the message with memory context
             if context:
                 enhanced_prompt = f"Context from memory:\n{context}\n\nUser message: {message}"
-                response = self.conversation.process_message(enhanced_prompt)
+                response = self.conversation.process_message(enhanced_prompt) if self.conversation else self.reason(enhanced_prompt, "conversational")
             else:
-                response = self.conversation.process_message(message)
+                response = self.conversation.process_message(message) if self.conversation else self.reason(message, "conversational")
                 
             # Store the interaction in memory
             try:
@@ -1592,10 +2177,326 @@ class Sully:
                     "conversation",
                     {"timestamp": datetime.now().isoformat()}
                 )
-            except:
-                pass
+            except Exception as e:
+                self.logger.error(f"Memory interaction storage error: {str(e)}")
                 
             return response
         except Exception as e:
+            self.logger.error(f"Memory-enhanced processing error: {str(e)}")
             # Fall back to standard processing
-            return self.conversation.process_message(message)
+            return self.conversation.process_message(message) if self.conversation else self.reason(message, "conversational")
+
+    def detect_emergent_patterns(self, threshold=0.7):
+        """
+        Detect emergent patterns in the cognitive system.
+        
+        Args:
+            threshold: Detection threshold (0.0-1.0)
+            
+        Returns:
+            Dictionary with detected patterns
+        """
+        self._track_module_access("emergence")
+        
+        if not self.emergence:
+            return {
+                "status": "Emergence framework not available",
+                "fallback": self.reasoning_node.reason(
+                    "Analyze the current system for emergent cognitive patterns",
+                    "analytical"
+                )
+            }
+            
+        try:
+            return self.emergence.detect_emergence(threshold=threshold)
+        except Exception as e:
+            self.logger.error(f"Emergent pattern detection error: {str(e)}")
+            return {
+                "error": str(e),
+                "fallback": self.reasoning_node.reason(
+                    "Analyze the current system for emergent cognitive patterns",
+                    "analytical"
+                )
+            }
+            
+    def get_emergent_properties(self):
+        """
+        Get a list of detected emergent properties.
+        
+        Returns:
+            Dictionary with emergent properties
+        """
+        self._track_module_access("emergence")
+        
+        if not self.emergence:
+            return {
+                "status": "Emergence framework not available",
+                "properties": []
+            }
+            
+        try:
+            return self.emergence.get_properties()
+        except Exception as e:
+            self.logger.error(f"Emergent properties error: {str(e)}")
+            return {
+                "error": str(e),
+                "properties": []
+            }
+
+    def establish_goal(self, goal, priority=0.7, domain=None, deadline=None):
+        """
+        Establish a new autonomous goal.
+        
+        Args:
+            goal: Description of the goal
+            priority: Priority level (0.0-1.0)
+            domain: Optional domain of the goal
+            deadline: Optional deadline for completion
+            
+        Returns:
+            Goal establishment results
+        """
+        self._track_module_access("autonomous_goals")
+        
+        if not self.autonomous_goals:
+            return {
+                "status": "acknowledged",
+                "goal": goal,
+                "message": "Goal acknowledged but autonomous goals system not available"
+            }
+            
+        try:
+            result = self.autonomous_goals.establish_goal(
+                goal=goal,
+                priority=priority,
+                domain=domain,
+                deadline=deadline
+            )
+            
+            # Store in memory if available
+            if self.memory_integration:
+                try:
+                    self.memory_integration.store_experience(
+                        content=f"Established goal: {goal}",
+                        source="goal_system",
+                        importance=priority,
+                        emotional_tags={"determination": priority, "focus": priority * 0.9},
+                        concepts=self._extract_key_concepts(goal)
+                    )
+                except Exception as e:
+                    self.logger.error(f"Memory storage error: {str(e)}")
+                    
+            return result
+        except Exception as e:
+            self.logger.error(f"Goal establishment error: {str(e)}")
+            return {
+                "status": "error",
+                "goal": goal,
+                "message": f"Error establishing goal: {str(e)}"
+            }
+            
+    def get_active_goals(self):
+        """
+        Get a list of current active goals.
+        
+        Returns:
+            Dictionary with active goals
+        """
+        self._track_module_access("autonomous_goals")
+        
+        if not self.autonomous_goals:
+            return {
+                "status": "limited",
+                "goals": []
+            }
+            
+        try:
+            return self.autonomous_goals.get_active_goals()
+        except Exception as e:
+            self.logger.error(f"Active goals retrieval error: {str(e)}")
+            return {
+                "error": str(e),
+                "goals": []
+            }
+
+    def register_interest(self, topic, engagement_level=0.8, context=None):
+        """
+        Register interest in a topic for the autonomous system.
+        
+        Args:
+            topic: Topic of interest
+            engagement_level: Level of interest (0.0-1.0)
+            context: Optional context of the interest
+            
+        Returns:
+            Interest registration results
+        """
+        self._track_module_access("autonomous_goals")
+        
+        if not self.autonomous_goals:
+            return {
+                "status": "acknowledged",
+                "topic": topic,
+                "message": "Interest acknowledged but autonomous goals system not available"
+            }
+            
+        try:
+            result = self.autonomous_goals.register_interest(
+                topic=topic,
+                engagement_level=engagement_level,
+                context=context
+            )
+            
+            # Store in memory if available
+            if self.memory_integration:
+                try:
+                    self.memory_integration.store_experience(
+                        content=f"Registered interest in: {topic}",
+                        source="interest_tracking",
+                        importance=engagement_level * 0.7,
+                        emotional_tags={"curiosity": engagement_level, "interest": engagement_level},
+                        concepts=[topic]
+                    )
+                except Exception as e:
+                    self.logger.error(f"Memory storage error: {str(e)}")
+                    
+            return result
+        except Exception as e:
+            self.logger.error(f"Interest registration error: {str(e)}")
+            return {
+                "status": "error",
+                "topic": topic,
+                "message": f"Error registering interest: {str(e)}"
+            }
+
+    def process_visual(self, image_path, analysis_depth="standard", include_objects=True, include_scene=True):
+        """
+        Process and understand an image.
+        
+        Args:
+            image_path: Path to the image file
+            analysis_depth: Depth of analysis
+            include_objects: Whether to identify objects
+            include_scene: Whether to analyze the scene
+            
+        Returns:
+            Visual processing results
+        """
+        self._track_module_access("visual_cognition")
+        
+        if not self.visual_cognition:
+            return {
+                "status": "error",
+                "message": "Visual cognition system not available"
+            }
+            
+        if not os.path.exists(image_path):
+            return {
+                "status": "error",
+                "message": f"Image file not found: {image_path}"
+            }
+            
+        try:
+            return self.visual_cognition.process_image(
+                image_path=image_path,
+                analysis_depth=analysis_depth,
+                include_objects=include_objects,
+                include_scene=include_scene
+            )
+        except Exception as e:
+            self.logger.error(f"Visual processing error: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Error processing image: {str(e)}"
+            }
+
+    def analyze_module_performance(self, module_name):
+        """
+        Analyze the performance of a specific module.
+        
+        Args:
+            module_name: Name of the module to analyze
+            
+        Returns:
+            Module performance analysis
+        """
+        self._track_module_access("neural_modification")
+        
+        if not self.neural_modification:
+            return {
+                "status": "error",
+                "message": "Neural modification system not available"
+            }
+            
+        try:
+            return self.neural_modification.analyze_module(module_name)
+        except Exception as e:
+            self.logger.error(f"Module analysis error: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Error analyzing module: {str(e)}"
+            }
+
+    def get_system_status(self):
+        """
+        Get comprehensive system status information.
+        
+        Returns:
+            Dictionary with system status
+        """
+        # Gather module status information
+        initialization_status = self.get_initialization_status()
+        
+        # Get module access statistics
+        access_stats = self.get_module_access_stats()
+        
+        # Get memory status if available
+        memory_status = None
+        if self.memory_integration:
+            try:
+                memory_status = self.memory_integration.get_memory_stats()
+            except Exception as e:
+                self.logger.error(f"Memory status error: {str(e)}")
+                memory_status = {"error": f"Unable to get memory status: {str(e)}"}
+                
+        # Get kernel integration status if available
+        kernel_status = None
+        if self.kernel_integration:
+            try:
+                kernel_status = self.kernel_integration.get_stats()
+            except Exception as e:
+                self.logger.error(f"Kernel status error: {str(e)}")
+                kernel_status = {"error": f"Unable to get kernel status: {str(e)}"}
+                
+        # Check for emergent properties if available
+        emergent_properties = None
+        if self.emergence:
+            try:
+                emergent_properties = self.emergence.get_properties()
+            except Exception as e:
+                self.logger.error(f"Emergence properties error: {str(e)}")
+                emergent_properties = {"error": f"Unable to get emergent properties: {str(e)}"}
+                
+        # Get active goals if available
+        active_goals = None
+        if self.autonomous_goals:
+            try:
+                active_goals = self.autonomous_goals.get_active_goals()
+            except Exception as e:
+                self.logger.error(f"Active goals error: {str(e)}")
+                active_goals = {"error": f"Unable to get active goals: {str(e)}"}
+                
+        return {
+            "system_id": self.system_id,
+            "creation_time": self.creation_time.isoformat(),
+            "last_active": self.last_active.isoformat(),
+            "uptime_seconds": (datetime.now() - self.creation_time).total_seconds(),
+            "initialization_status": initialization_status,
+            "module_access": access_stats,
+            "memory_status": memory_status,
+            "kernel_status": kernel_status,
+            "emergent_properties": emergent_properties,
+            "active_goals": active_goals,
+            "knowledge_items": len(self.knowledge),
+            "errors": len(self.initialization_errors)
+        }
