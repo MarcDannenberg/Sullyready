@@ -1,0 +1,36 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sully</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; background: #f9f9f9; }
+    #chat { white-space: pre-wrap; margin-bottom: 1em; }
+    textarea { width: 100%; height: 80px; font-size: 16px; }
+    button { padding: 10px 20px; font-size: 16px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Talk to Sully</h1>
+  <div id="chat"></div>
+  <textarea id="input" placeholder="Ask Sully anything..."></textarea>
+  <button onclick="send()">Talk</button>
+  <script>
+    async function send() {
+      const input = document.getElementById('input');
+      const chat = document.getElementById('chat');
+      const msg = input.value.trim();
+      if (!msg) return;
+      chat.innerHTML += "🧍 You: " + msg + "\n";
+      input.value = "";
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ message: msg })
+      });
+      const data = await res.json();
+      chat.innerHTML += "🤖 Sully: " + data.response + "\n\n";
+    }
+  </script>
+</body>
+</html>

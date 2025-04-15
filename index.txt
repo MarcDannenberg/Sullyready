@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sully Interface</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      padding: 2em;
+    }
+    h1 {
+      color: #58a6ff;
+    }
+    .chat-box, .upload-box {
+      background: #161b22;
+      padding: 1em;
+      margin-bottom: 2em;
+      border-radius: 8px;
+    }
+    input, button, textarea {
+      font-size: 1em;
+      padding: 0.5em;
+      margin: 0.3em 0;
+      border-radius: 4px;
+      border: none;
+    }
+    button {
+      background-color: #238636;
+      color: white;
+      cursor: pointer;
+    }
+    textarea {
+      width: 100%;
+      height: 80px;
+      resize: vertical;
+    }
+    #response {
+      margin-top: 1em;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🧠 Talk to Sully</h1>
+
+  <div class="chat-box">
+    <form id="chatForm">
+      <label>Message:</label><br>
+      <textarea id="message" placeholder="Ask Sully anything..."></textarea><br>
+      <label>Tone:</label><br>
+      <input type="text" id="tone" value="reflective"/><br>
+      <button type="submit">Send</button>
+    </form>
+    <div id="response"></div>
+  </div>
+
+  <div class="upload-box">
+    <h2>📚 Upload a Book to Sully</h2>
+    <form id="uploadForm">
+      <input type="file" id="fileInput" accept="application/pdf"/>
+      <button type="submit">Upload</button>
+    </form>
+    <div id="uploadStatus"></div>
+  </div>
+
+  <script>
+    const baseURL = "http://clarityinrecurse.com:8000";
+
+    // Chat
+    document.getElementById('chatForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const message = document.getElementById('message').value;
+      const tone = document.getElementById('tone').value;
+
+      const res = await fetch(`${baseURL}/api/sully/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, tone })
+      });
+
+      const data = await res.json();
+      document.getElementById('response').innerText = data.response || JSON.stringify(data, null, 2);
+    });
+
+    // Upload
+    document.getElementById('uploadForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const fileInput = document.getElementById('fileInput');
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+
+      const res = await fetch(`${baseURL}/api/sully/ingest`, {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await res.json();
+      document.getElementById('uploadStatus').innerText = data.status || "Upload complete!";
+    });
+  </script>
+</body>
+</html>
