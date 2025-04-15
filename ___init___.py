@@ -1,68 +1,48 @@
-# sully_engine/__init__.py
-# 🧠 Sully Core Engine Package
+# sully_engine/kernel_modules/__init__.py
+# 🧠 Sully Core Cognitive Kernel Modules
 
-# Core system components
-from .memory import SullySearchMemory
-from .reasoning import SymbolicReasoningNode
-from .pdf_reader import PDFReader, extract_text_from_pdf, extract_kernel_from_text
-from .memory_integration import MemoryIntegration, integrate_with_sully
-from .logic_kernel import LogicKernel, integrate_with_sully as integrate_logic
+from .judgment import JudgmentProtocol
+from .dream import DreamCore
+from .math_translator import SymbolicMathTranslator
+from .fusion import SymbolFusionEngine
+from .paradox import ParadoxLibrary
+from .identity import SullyIdentity
+from .codex import SullyCodex
 
-# Kernel modules
-from .kernel_modules.identity import SullyIdentity
-from .kernel_modules.codex import SullyCodex
-from .kernel_modules.judgment import JudgmentProtocol
-from .kernel_modules.dream import DreamCore
-from .kernel_modules.math_translator import SymbolicMathTranslator
-from .kernel_modules.fusion import SymbolFusionEngine
-from .kernel_modules.paradox import ParadoxLibrary
-from .kernel_modules.neural_modification import NeuralModification
-from .kernel_modules.continuous_learning import ContinuousLearningSystem
-from .kernel_modules.autonomous_goals import AutonomousGoalSystem
-from .kernel_modules.visual_cognition import VisualCognitionSystem
-from .kernel_modules.emergence_framework import EmergenceFramework
-from .kernel_modules.virtue import VirtueEngine
-from .kernel_modules.intuition import Intuition
+# New autonomous brain modules
+from .neural_modification import NeuralModification
+from .continuous_learning import ContinuousLearningSystem
+from .autonomous_goals import AutonomousGoalSystem
+from .visual_cognition import VisualCognitionSystem
+from .emergence_framework import EmergenceFramework
 
-# Conversation system
-from .conversation_engine import ConversationEngine
+# Missing integrations now added
+from .persona import PersonaManager
+from .intuition import SomaticIntuition, SocialIntuition
+from .logic_kernel import LogicKernel
 
-# Kernel integration
-from .kernel_integration import KernelIntegrationSystem, initialize_kernel_integration
+# New: Games Kernel
+from .games import SullyGames
 
-# Re-export classes for easier imports
 __all__ = [
-    # Core components
-    "SullySearchMemory",
-    "SymbolicReasoningNode",
-    "PDFReader",
-    "extract_text_from_pdf",
-    "extract_kernel_from_text",
-    "MemoryIntegration",
-    "integrate_with_sully",
-    "LogicKernel",
-    "integrate_logic",
-    
-    # Kernel modules
-    "SullyIdentity",
-    "SullyCodex",
     "JudgmentProtocol",
     "DreamCore",
     "SymbolicMathTranslator",
     "SymbolFusionEngine",
     "ParadoxLibrary",
+    "SullyIdentity",
+    "SullyCodex",
+    # New modules
     "NeuralModification",
     "ContinuousLearningSystem",
     "AutonomousGoalSystem",
     "VisualCognitionSystem",
     "EmergenceFramework",
-    "VirtueEngine",
-    "Intuition",
-    
-    # Conversation
-    "ConversationEngine",
-    
-    # Kernel integration
-    "KernelIntegrationSystem",
-    "initialize_kernel_integration"
+    # Added modules
+    "PersonaManager",
+    "SomaticIntuition",
+    "SocialIntuition",
+    "LogicKernel",
+    # Games
+    "SullyGames"
 ]
